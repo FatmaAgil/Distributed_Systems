@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: products-db
+  labels:
+    app: widgetario
+    kubernetes.courselabs.co: hackathon
+spec:
+  selector:
+    matchLabels:
+        app: widgetario
+        component: products-db
+  template:
+    metadata:
+      labels: 
+        app: widgetario
+        component: products-db
+        hackathon: part-2
+    spec:
+      containers:
+        - name: app
+          image: widgetario/products-db:21.03
+          ports:
+            - containerPort: 5432
+              name: postgres
+              protocol: TCP
+          volumeMounts:
+            - name: secret-volume
+              mountPath: "/var/lib/postgresql/data"
+              subPath: data
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: products-db-password
+                  key: POSTGRES_PASSWORD

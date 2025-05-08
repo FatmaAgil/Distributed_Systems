@@ -1,0 +1,14 @@
+﻿apiVersion: v1
+kind: Service
+metadata:
+  name: products-db
+  labels:
+    app: widgetario
+spec:
+  ports:
+    - port: 5432
+      targetPort: postgres
+  clusterIP: None  # Headless service for StatefulSet
+  selector:
+    app: widgetario
+    component: products-db
