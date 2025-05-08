@@ -1,0 +1,95 @@
+﻿apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: products-db
+  labels:
+    app: widgetario
+    kubernetes.courselabs.co: hackathon
+spec:
+  serviceName: products-db
+  replicas: 2  # 1 primary (products-db-0), 1 secondary (products-db-1)
+  selector:
+    matchLabels:
+      app: widgetario
+      component: products-db
+  template:
+    metadata:
+      labels:
+        app: widgetario
+        component: products-db
+    spec:
+      initContainers:
+      - name: init-replica
+        image: postgres:13
+        command:
+        - bash
+        - -c
+        - |
+          if [[ hostname =~ -0$ ]]; then
+            # Primary setup
+            echo "Initializing primary..."
+            pg_ctl -D /var/lib/postgresql/data/pgdata -w start
+            psql -U postgres -c "CREATE DATABASE postgres;"
+            pg_ctl -D /var/lib/postgresql/data/pgdata -w stop
+          elif [[ hostname =~ -1$ ]]; then
+            # Replica setup
+            until pg_isready -h products-db-0.products-db.default.svc.cluster.local; do sleep 1; done
+            pg_basebackup -h products-db-0.products-db.default.svc.cluster.local -U postgres -D /var/lib/postgresql/data/pgdata -P --wal-method=stream
+            echo "standby" > /var/lib/postgresql/data/pgdata/standby.signal
+          fi
+        env:
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: products-db-password
+              key: POSTGRES_PASSWORD
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/postgresql/data
+      containers:
+      - name: postgres
+        image: postgres:13
+        ports:
+        - containerPort: 5432
+          name: postgres
+        env:
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: products-db-password
+              key: POSTGRES_PASSWORD
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/postgresql/data
+        - name: config
+          mountPath: /etc/postgresql
+      volumes:
+      - name: config
+        configMap:
+          name: postgres-config
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 1Gi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-config
+  labels:
+    app: widgetario
+data:
+  postgresql.conf: |
+    wal_level = replica
+    max_wal_senders = 3
+    wal_keep_size = 128
+    hot_standby = on
+    primary_conninfo = 'host=products-db-0.products-db.default.svc.cluster.local port=5432 user=postgres password=SecureDistributedSystemGroup4'  # For replica
