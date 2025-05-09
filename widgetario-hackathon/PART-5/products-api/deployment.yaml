@@ -23,13 +23,13 @@ spec:
           ports:
             - containerPort: 80
               name: http
-          readnessProbe:
+          readinessProbe:
             httpGet:
               path: /
               port: http
             periodSeconds: 20
             failureThreshold: 2
-          livenessPRobe:
+          livenessProbe:
             httpGet:
               path: /
               port: http
